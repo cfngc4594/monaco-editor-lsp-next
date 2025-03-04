@@ -1,0 +1,31 @@
+FROM dockerp.com/alpine:latest AS builder
+
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirror.nju.edu.cn/alpine#g' /etc/apk/repositories&& \
+    apk add --no-cache git npm
+
+# 修改为南京大学镜像源
+RUN npm config set registry https://repo.nju.edu.cn/repository/npm/
+
+WORKDIR /app
+
+RUN git clone https://gh-proxy.com/github.com/wylieconlon/jsonrpc-ws-proxy.git
+
+WORKDIR /app/jsonrpc-ws-proxy
+
+COPY servers.yml .
+
+# 合并命令减少镜像层
+RUN npm install --registry=https://repo.nju.edu.cn/repository/npm/ && npm run prepare
+
+FROM dockerp.com/alpine:latest
+
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirror.nju.edu.cn/alpine#g' /etc/apk/repositories&& \
+    apk add --no-cache build-base clang-extra-tools nodejs
+
+WORKDIR /app/jsonrpc-ws-proxy
+
+COPY --from=builder /app/jsonrpc-ws-proxy .
+
+EXPOSE 3000
+
+CMD ["node", "dist/server.js", "--port", "3000", "--languageServers", "servers.yml"]

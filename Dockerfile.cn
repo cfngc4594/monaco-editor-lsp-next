@@ -1,0 +1,74 @@
+# syntax=docker.io/docker/dockerfile:1
+FROM dockerp.com/node:22-alpine AS base
+
+FROM base AS deps
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirror.nju.edu.cn/alpine#g' /etc/apk/repositories && \
+    apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* bun.lock* .npmrc* ./
+
+# 统一配置所有包管理器使用淘宝源
+RUN \
+    npm config set registry https://registry.npmmirror.com && \
+    if [ -f yarn.lock ]; then \
+        # yarn config set registry https://registry.npmmirror.com && \
+        yarn --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then \
+        npm ci --registry=https://registry.npmmirror.com; \
+    elif [ -f pnpm-lock.yaml ]; then \
+        corepack enable pnpm && \
+        # pnpm config set registry https://registry.npmmirror.com && \
+        pnpm i --frozen-lockfile; \
+    elif [ -f bun.lock ]; then \
+        sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirror.nju.edu.cn/alpine#g' /etc/apk/repositories && \
+        apk add --no-cache curl bash && \
+        npm install -g bun && \
+        export BUN_INSTALL="$HOME/.bun" && \
+        export PATH="$BUN_INSTALL/bin:$PATH" && \
+        bun install --frozen-lockfile; \
+    else echo "Lockfile not found." && exit 1; \
+    fi
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# 合并构建命令
+RUN \
+    npm config set registry https://registry.npmmirror.com && \
+    if [ -f yarn.lock ]; then yarn run build; \
+        elif [ -f package-lock.json ]; then npm run build; \
+        elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
+        elif [ -f bun.lock ]; then \
+        sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirror.nju.edu.cn/alpine#g' /etc/apk/repositories && \
+        apk add --no-cache curl bash && \
+        npm install -g bun && \
+        export BUN_INSTALL="$HOME/.bun" && \
+        export PATH="$BUN_INSTALL/bin:$PATH" && \
+        bun run build; \
+        else echo "Lockfile not found." && exit 1; \
+        fi
+
+FROM base AS runner
+WORKDIR /app
+
+RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirror.nju.edu.cn/alpine#g' /etc/apk/repositories && \
+    apk add --no-cache curl && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000 HOSTNAME="0.0.0.0"
+CMD ["node", "server.js"]

@@ -1,0 +1,63 @@
+services:
+  monaco-editor-lsp-next:
+    build:
+      context: ./
+      dockerfile: Dockerfile.cn
+    image: monaco-editor-lsp-next:latest
+    container_name: monaco-editor-lsp-next
+    restart: always
+    ports:
+      - "3000:3000"
+    networks:
+      - monaco-editor-lsp-next
+    depends_on:
+      - lsp-c
+      - lsp-cpp
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail http://localhost:3000 || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  lsp-c:
+    build:
+      context: ./docker/lsp/clangd
+      dockerfile: Dockerfile.cn
+    image: lsp-c:latest
+    container_name: lsp-c
+    restart: always
+    ports:
+      - "4594:3000"
+    networks:
+      - monaco-editor-lsp-next
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -zv localhost 3000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lsp-cpp:
+    build:
+      context: ./docker/lsp/clangd
+      dockerfile: Dockerfile.cn
+    image: lsp-cpp:latest
+    container_name: lsp-cpp
+    restart: always
+    ports:
+      - "4595:3000"
+    networks:
+      - monaco-editor-lsp-next
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -zv localhost 3000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  monaco-editor-lsp-next:
+    name: monaco-editor-lsp-next
+    driver: bridge

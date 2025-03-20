@@ -49,6 +49,7 @@ model Problem {
   userId      String
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   templates   Template[]
+  ReferenceCode ReferenceCode[]
 
   @@index([userId])
   @@index([difficulty])
@@ -175,4 +176,17 @@ model Authenticator {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, credentialID])
+}
+
+model ReferenceCode {
+  //@@map("reference_code")
+  language       EditorLanguage
+  code           String
+  problemId      String
+  problem        Problem    @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  inputSchema    Json       // 输入参数结构描述
+  testTemplate   String?    // 测试代码模板
+  expectedOutput String     // 输出验证逻辑
+
+  @@id([problemId, language])
 }
